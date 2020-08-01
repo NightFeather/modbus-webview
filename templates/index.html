@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modbus Viewer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+    }
+
+    #main {
+      margin: 0 auto;
+      width: 90em;
+    }
+
+    .device {
+      display: block;
+      background-color: gainsboro;
+    }
+
+    .datablock {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-gap: 10px;
+      padding: 10px;
+    }
+    .datablock > div {
+      border-radius: 5px;
+    }
+
+    .signal {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      row-gap: 10px;
+      column-gap: 10px;
+      list-style: none;
+      margin: 1em;
+    }
+
+    .signal > *:before {
+      display: block;
+      padding: 0.2em;
+      content: attr(data-value);
+      text-align: center;
+    }
+
+    .digital > [data-value=off] {
+      background-color: crimson;
+      color: white;
+    }
+    .digital > [data-value=on] {
+      background-color: greenyellow;
+      color: black;
+    }
+
+  </style>
+</head>
+<body>
+  <template id="tmp-device">
+    <div class="device">
+      <h2>name</h2>
+      <div class='datablock'>
+        <div class="coil">
+          <div>Coils</div>
+          <ul class="digital signal">
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+            <li data-value='on'></li>
+          </ul>
+        </div>
+        <div class="discrete">
+          <div>Discrete Inputs</div>
+          <ul class="digital signal">
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+            <li data-value="on"></li>
+          </ul>
+        </div>
+        <div class="holding">
+          <div>Holding Registers</div>
+          <ul class="analog signal">
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+          </ul>
+        </div>
+        <div class="inputs">
+          <div>Input Registers</div>
+          <ul class="analog signal">
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+            <li data-value="65535"></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </template>
+  <div id="main">
+    <div>
+      <h2>Add device</h2>
+      <label for="host">Hostname</label><input type="text" name='host'>
+      <button id='create_device'>Create</button>
+    </div>
+  </div>
+  <script>
+    function makeDevice(name) {
+      let tmp = document.querySelector('#tmp-device')
+      tmp.content.querySelector('h2').textContent = name
+      return document.importNode(tmp.content, true)
+    }
+
+    function updateDevice(node, type, values, offset) {
+      if(!offset) { offset = 0; }
+      let el = node.querySelector(`.${type}`)
+      if(!el) {
+        console.error(`Cannot find block .${type}`)
+        console.error(node)
+        return;
+      }
+
+      let slots = el.querySelectorAll('[data-value]')
+      console.log(slots)
+      for (let index = 0; index < values.length; index++) {
+        if(typeof(values[index]) === 'boolean') {
+          slots[index+offset].dataset.value = values[index] ? 'on' : 'off';
+        } else {
+          slots[index+offset].dataset.value = `${values[index]}`
+        }
+      }
+    }
+
+    function pollDevice(sock, host) {
+      sock.send(JSON.stringify({
+          host: host,
+          action: 'read',
+          type: 'coil',
+          addr: 0,
+          size: 10,
+      }))
+      sock.send(JSON.stringify({
+          host: host,
+          action: 'read',
+          type: 'inputs',
+          addr: 0,
+          size: 10,
+      }))
+      sock.send(JSON.stringify({
+          host: host,
+          action: 'read',
+          type: 'discrete',
+          addr: 0,
+          size: 10,
+      }))
+      sock.send(JSON.stringify({
+          host: host,
+          action: 'read',
+          type: 'holding',
+          addr: 0,
+          size: 10,
+      }))
+      setTimeout(e => pollDevice(sock, host), 1000)
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+
+      window.registry = {}
+      window.sock = new WebSocket(`ws://${location.host}/sock/`)
+      window.sock.onmessage = console.log
+
+      document.querySelector('#create_device').addEventListener('click', ev => {
+        let host = document.querySelector('input[name=host]').value
+        sock.send(JSON.stringify({
+          host: host,
+          action: 'open',
+        }))
+      })
+
+      sock.addEventListener('message', ev => {
+        let data = JSON.parse(ev.data)
+        console.log(ev)
+        if(data['result'] == 'error') {
+          console.error(data['data']['mesg'])
+        } else if(data['result'] == 'open') {
+          if(window.registry[data['data']['host']]) {
+            return
+          }
+          let dev = makeDevice(data['data']['host'])
+          window.registry[data['data']['host']] = dev.querySelector('div')
+          document.querySelector('#main').appendChild(dev)
+          pollDevice(sock, data['data']['host'])
+        } else if(data['result'] == 'read') {
+          let dev = window.registry[data['data']['host']]
+          if(!dev) { return }
+          updateDevice(dev, data['data']['type'], data['data']['data'], 0)
+        }
+      })
+    })
+    
+  </script>
+</body>
+</html>
