@@ -13,7 +13,7 @@ Django==3.1.13
 hyperlink==19.0.0
 idna==2.10
 incremental==17.5.0
-ipython==7.16.1
+ipython==7.16.3
 ipython-genutils==0.2.0
 jedi==0.17.2
 parso==0.7.1
